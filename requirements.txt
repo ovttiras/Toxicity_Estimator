@@ -9,7 +9,7 @@ Pillow==8.0.1
 ipython==8.4.0
 streamlit==1.13.0
 python-math==0.0.1
-rdkit-pypi==2023.3.1b1
+rdkit-pypi==2022.9.5
 onnxruntime==1.14.1
 chembl-webresource-client==0.10.8
 matplotlib==3.7.1
