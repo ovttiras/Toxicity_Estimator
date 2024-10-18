@@ -32,17 +32,17 @@ import base64
 # Page Title
 ######################
 
-st.write("<h1 style='text-align: center; color: #00008B;'> Toxicity Estimator</h1>", unsafe_allow_html=True)
-st.write("<h3 style='text-align: center; color: black;'> Acute Toxicity Estimation using QSAR Models.</h1>", unsafe_allow_html=True)
+st.write("<h1 style='text-align: center; color: #FF8C00;'> Toxicity Estimator</h1>", unsafe_allow_html=True)
+st.write("<h5 style='text-align: justify; color: black;'> Assessment of the acute toxicity of xenobiotics in oral and intravenous administration to rats. Find the toxicity of a compound in a database or predict its hazard level using QSAR models. Classification by toxicity classes for oral administration of toxicants is carried out in accordance with the classification of the World Health Organization</h5>", unsafe_allow_html=True)
 if st.sidebar.button('Application description'):
-    st.sidebar.write('The Toxicity Estimator application provides an alternative method for assessing the potential of chemicals to be Histone deacetylas 3 (HDAC3) inhibitors. The application also allows to predict the level of toxicity (rat, oral, LD50) of the studied compounds.  This application makes predictions based on Quantitative Structure-Activity Relationship (QSAR) models build on curated datasets. If experimental activity or toxicity values are available for the compound, they are displayed in the summary table. The  models were developed using open-source chemical descriptors based on Morgan fingerprints, along with the Gradient Boosting, Support Vector Machines  algorithms, using Python. The models were generated applying the best practices for QSAR model development and validation widely accepted by the community. The applicability domain (AD) of the models was calculated as Dcutoff = ⟨D⟩ + Zs, where «Z» is a similarity threshold parameter defined by a user (0.5 in this study) and «⟨D⟩» and «s» are the average and standard deviation, respectively, of all Euclidian distances in the multidimensional descriptor space between each compound and its nearest neighbors for all compounds in the training set. Batch processing is available through https://github.com/ovttiras/HDAC3_VS_assistant.')
+    st.sidebar.write('The Toxicity Estimator application  allows to predict the level of toxicity (LD50,rat, oral or intravenous) for  compounds.  This application makes predictions based on Quantitative Structure-Activity Relationship (QSAR) models build on curated datasets. If experimental toxicity values are available for the compound, they are displayed in the summary table. The  models were developed using open-source chemical descriptors based on Morgan fingerprints and MACCS keys, along with the CatBoost. CatBoost is a machine learning method based on gradient boosting over decision trees. The models were generated applying the best practices for QSAR model development and validation widely accepted by the community. The applicability domain (AD) of the models was calculated as Dcutoff = ⟨D⟩ + Zs, where «Z» is a similarity threshold parameter defined by a user (0.5 in this study) and «⟨D⟩» and «s» are the average and standard deviation, respectively, of all Euclidian distances in the multidimensional descriptor space between each compound and its nearest neighbors for all compounds in the training set. Batch processing is available through https://github.com/ovttiras/Toxicity_Estimator.')
 
 
 with open("manual.pdf", "rb") as file:
     btn=st.sidebar.download_button(
     label="Click to download brief manual",
     data=file,
-    file_name="manual of HDAC3_VS_assistant.pdf",
+    file_name="manual of Toxicity Estimator.pdf",
     mime="application/octet-stream"
 )
 
@@ -61,12 +61,27 @@ def rdkit_numpy_convert(f_vs):
         DataStructs.ConvertToNumpyArray(f, arr)
         output.append(arr)
         return np.asarray(output)
-st.write("<h2 style='text-align: center; color: black;'> Step 1. Draw molecule or select input molecular files.</h2>", unsafe_allow_html=True)
+def toxicity_labels(s):
+    if s.Hazard_Categories =='Ia class, Extremely hazardous' or s.Hazard_Categories =='Ib class,Highly hazardous':
+        return ['background-color: red']*len(s)
+    elif s.Hazard_Categories ==('II class,Moderately hazardous'):
+        return ['background-color: yellow']*len(s)
+    elif s.Hazard_Categories ==('III class, Slightly hazardous'):
+        return ['background-color: blue']*len(s)
+    else:
+        return ['background-color: green']*len(s)
+
+st.write("<h3 style='text-align: center; color: black;'> Step 1. Draw molecule or select input molecular files.</h3>", unsafe_allow_html=True)
 files_option1 = st.selectbox('', ('Draw the molecule and click the "Apply" button','SMILES', '*CSV file containing SMILES', 'MDL multiple SD file (*.sdf)'))
 if files_option1 == 'Draw the molecule and click the "Apply" button':
     smiles = st_ketcher(height=400)
-    m = Chem.MolFromSmiles(smiles)
-    inchi = str(Chem.MolToInchi(m))
+    st.write(f'The SMILES of the created  chemical: "{smiles}"')
+    if len(smiles)!=0:
+        canon_smi = Chem.MolToSmiles(Chem.MolFromSmiles(smiles),isomericSmiles = False)
+        smiles=standardize_smiles(canon_smi)
+        m = Chem.MolFromSmiles(smiles)
+        inchi = str(Chem.MolToInchi(m))
+        
 if files_option1 == 'SMILES':
     SMILES_input = ""
     compound_smiles = st.text_area("Enter only one structure as a SMILES", SMILES_input)
@@ -98,7 +113,7 @@ if files_option1 == '*CSV file containing SMILES':
                 canon_smi='wrong_smiles'
                 count+=1
                 df_ws.SMILES = df_ws.SMILES.replace (i, canon_smi)
-        st.header('CHEMICAL STRUCTURE VALIDATION AND STANDARDIZATION:')
+        st.write('CHEMICAL STRUCTURE VALIDATION AND STANDARDIZATION:')
         st.write(f'Original data: {len(df_ws)} molecules')
         st.write(f'Failed data: {count} molecules')
 
@@ -147,7 +162,6 @@ if files_option1 == 'MDL multiple SD file (*.sdf)':
 
         
         st.write('Original data: ', len(all_mols), 'molecules')
-        # st.write('Kept data: ', len(moldf), 'molecules')
         st.write('Failed data: ', len(failed_mols), 'molecules')
         if len(failed_mols)!=0:
             number =[]
@@ -200,7 +214,7 @@ class one_molecules(Models):
     def seach_predic(self):
         # search experimental toxicity value
         if inchi in self.res:
-            exp_tox=str(self.res[inchi][0]['TOX_VALUE'])
+            exp_tox=float(self.res[inchi][0]['TOX_VALUE'])
             cas_id=str(self.res[inchi][0]['CAS_Number'])
             value_ped_tox='see experimental value'
             cpd_AD_vs_tox='-'            
@@ -209,7 +223,7 @@ class one_molecules(Models):
             y_pred_con_tox = self.model.predict(self.X)           
             y_pred_con_tox_t=y_pred_con_tox[0]
             MolWt=ExactMolWt(Chem.MolFromSmiles(smiles))
-            value_ped_tox=str(round((10**(y_pred_con_tox_t*-1)*1000)*MolWt, 4))
+            value_ped_tox=round((10**(y_pred_con_tox_t*-1)*1000)*MolWt, 4)
             # Estimination AD for toxicity
             neighbors_k_vs_tox = pairwise_distances(self.x_tr, Y=self.X, n_jobs=-1)
             neighbors_k_vs_tox.sort(0)
@@ -217,15 +231,51 @@ class one_molecules(Models):
             cpd_value_vs_tox = similarity_vs_tox[0, :]
             cpd_AD_vs_tox = np.where(cpd_value_vs_tox <= self.model_AD_limit, "Inside AD", "Outside AD")
             exp_tox="-"
-            cas_id="not detected"    
-        
-        st.header('**Prediction results:**')    
-        common_inf = pd.DataFrame({'SMILES':smiles, 'Predicted value toxicity, Ld50, mg/kg': value_ped_tox,
+            cas_id="not detected" 
+
+        if self.administration=='Oral':
+            categories=''
+            if isinstance(value_ped_tox,  float):
+                if value_ped_tox  <5:
+                    categories='Ia class, Extremely hazardous'
+                elif 5<=value_ped_tox<=50:
+                    categories='Ib class,Highly hazardous'
+                elif 50<=value_ped_tox<=2000:
+                    categories='II class,Moderately hazardous'
+                elif 2000<value_ped_tox<5000:
+                    categories='III class, Slightly hazardous'
+                else:
+                    categories='IV class, Unlikely to present acute hazard'
+            else:
+                if exp_tox<5:
+                    categories='Ia class, Extremely hazardous'
+                elif 5<=exp_tox<=50:
+                    categories='Ib class,Highly hazardous'
+                elif 50<=exp_tox<=2000:
+                    categories='II class,Moderately hazardous'
+                elif 2000<exp_tox<5000:
+                    categories='III class, Slightly hazardous'
+                else:
+                    categories='IV class, Unlikely to present acute hazard'
+
+
+            st.header('**Prediction results:**')    
+            common_inf = pd.DataFrame({'SMILES':smiles, 'Predicted value toxicity, rat, oral, Ld50, mg/kg': value_ped_tox,
+                'Applicability domain_tox': cpd_AD_vs_tox,
+                'Experimental value toxicity, rat, oral, Ld50': exp_tox, 
+                'CAS number': cas_id, 'Hazard_Categories':categories}, index=[1])
+            predictions_pred=common_inf.astype(str) 
+            st.dataframe(predictions_pred.style.apply(toxicity_labels, axis=1))
+            st.write('Classification into toxicity classes (see column "Hazard_Categories") is carried out in accordance with the classification of the World Health Organization (https://www.who.int/publications/i/item/9789240005662)')
+            st.image('Toxicity_labels.png') 
+        else:
+            st.header('**Prediction results:**')    
+            common_inf = pd.DataFrame({'SMILES':smiles, 'Predicted value toxicity, rat, intravenous, Ld50, mg/kg': value_ped_tox,
             'Applicability domain_tox': cpd_AD_vs_tox,
-            'Experimental value toxicity, Ld50': exp_tox,
+            'Experimental value toxicity,rat, intravenous, Ld50': exp_tox, 
             'CAS number': cas_id}, index=[1])
-        predictions_pred=common_inf.astype(str) 
-        st.dataframe(predictions_pred) 
+            predictions_pred=common_inf.astype(str) 
+            st.dataframe(predictions_pred) 
 
 class set_molecules(Models):
     def seach_predic_csv(self):
@@ -243,7 +293,7 @@ class set_molecules(Models):
             struct.append(i)
             # search experimental toxicity value
             if inchi in self.res:
-                exp_tox.append(str(self.res[inchi][0]['TOX_VALUE']))
+                exp_tox.append(self.res[inchi][0]['TOX_VALUE'])
                 cas_id.append(str(self.res[inchi][0]['CAS_Number']))
                 y_pred_con_tox.append('see experimental value')
                 cpd_AD_vs_tox.append('-')
@@ -270,16 +320,49 @@ class set_molecules(Models):
                 number.append(count) 
 
  
+        if self.administration=='Oral':
+            categories=''
+            if isinstance(value_ped_tox,  float):
+                if value_ped_tox  <5:
+                    categories='Ia class, Extremely hazardous'
+                elif 5<=value_ped_tox<=50:
+                    categories='Ib class,Highly hazardous'
+                elif 50<=value_ped_tox<=2000:
+                    categories='II class,Moderately hazardous'
+                elif 2000<value_ped_tox<5000:
+                    categories='III class, Slightly hazardous'
+                else:
+                    categories='IV class, Unlikely to present acute hazard'
+            else:
+                if exp_tox<5:
+                    categories='Ia class, Extremely hazardous'
+                elif 5<=exp_tox<=50:
+                    categories='Ib class,Highly hazardous'
+                elif 50<=exp_tox<=2000:
+                    categories='II class,Moderately hazardous'
+                elif 2000<exp_tox<5000:
+                    categories='III class, Slightly hazardous'
+                else:
+                    categories='IV class, Unlikely to present acute hazard'
+            common_inf = pd.DataFrame({'SMILES':struct, 'No.': number,'Predicted value toxicity, rat, oral, Ld50, mg/kg': y_pred_con_tox,
+            'Applicability domain_tox': cpd_AD_vs_tox,
+            'Experimental value toxicity, Ld50': exp_tox,
+            'CAS number': cas_id, 'Hazard_Categories':categories}, index=None)
+            predictions_pred = common_inf.set_index('No.')
+            predictions_pred=predictions_pred.astype(str)
+            st.dataframe(predictions_pred.style.apply(toxicity_labels, axis=1))
+            st.write('Classification into toxicity classes (see column "Hazard_Categories") is carried out in accordance with the classification of the World Health Organization (https://www.who.int/publications/i/item/9789240005662)')
+            st.image('Toxicity_labels.png') 
 
-        common_inf = pd.DataFrame({'SMILES':struct, 'No.': number,'Predicted value toxicity, Ld50, mg/kg': y_pred_con_tox,
-        'Applicability domain_tox': cpd_AD_vs_tox,
-        'Experimental value toxicity, Ld50': exp_tox,
-        'CAS number': cas_id}, index=None)
-        predictions_pred = common_inf.set_index('No.')
-        predictions_pred=predictions_pred.astype(str)
-                    
+        else:
+            common_inf = pd.DataFrame({'SMILES':struct, 'No.': number,'Predicted value toxicity, Ld50, mg/kg': y_pred_con_tox,
+            'Applicability domain_tox': cpd_AD_vs_tox,
+            'Experimental value toxicity, Ld50': exp_tox,
+            'CAS number': cas_id}, index=None)
+            predictions_pred = common_inf.set_index('No.')
+            predictions_pred=predictions_pred.astype(str)
+            st.dataframe(predictions_pred)
 
-        st.dataframe(predictions_pred)           
         def convert_df(df):
             return df.to_csv().encode('utf-8')  
         csv = convert_df(predictions_pred)
@@ -291,7 +374,7 @@ class set_molecules(Models):
             mime='text/csv',
         )
 
-st.write("<h2 style='text-align: center; color: black;'> Step 2. Select administration of substance.</h2>", unsafe_allow_html=True)
+st.write("<h3 style='text-align: center; color: black;'> Step 2. Select administration of substance.</h3>", unsafe_allow_html=True)
 files_option2 = st.selectbox('', ('Oral','Intravenous'))
 if (files_option1 =='Draw the molecule and click the "Apply" button' or files_option1 =='SMILES')  and files_option2 =='Intravenous':
     if st.button('Run predictions!'):
